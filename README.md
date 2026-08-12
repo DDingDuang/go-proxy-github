@@ -58,9 +58,9 @@ Windows 本地调试: `scripts\build.bat` 后直接运行 `bin\github-gateway-wi
 **部署到其他服务器(项目级打包, 服务器无需 Go)**:
 
 ```bash
-./scripts/deploy.sh         # 构建 linux/amd64 + linux/arm64, 产出 dist/github-gateway-<version>.tar.gz
+PLATFORMS="linux/amd64 linux/arm64" ./scripts/build.sh   # 多平台构建并打包到 dist/
 # 拷到服务器任意目录:
-tar xzf github-gateway-<version>.tar.gz
+tar xzf dist/github-gateway-<version>.tar.gz
 cp config.example.yaml config.yaml   # 填写上游代理账号密码
 ./github-gateway-linux-amd64 -config config.yaml   # 按服务器架构选择对应二进制
 ```
@@ -147,9 +147,7 @@ git config url."http://192.168.1.10:38018/https://raw.githubusercontent.com/".in
 ├── main.go                     # 入口: CONNECT 与 gin 路由分发、优雅退出
 ├── config.example.yaml         # 配置样例模板(真实 config.yaml 被 .gitignore 忽略)
 ├── scripts/
-│   ├── build.sh               # 构建当前平台二进制(Linux/macOS)
-│   ├── build.bat              # 构建当前平台二进制(Windows)
-│   └── deploy.sh              # 多平台部署包打包
+│   ├── build.sh               # 构建脚本: 单平台模式(到 bin/) / 打包模式(PLATFORMS= 多平台 tar.gz)
 ├── deploy/
 │   └── github-gateway.service  # systemd 服务示例(按需拷贝)
 └── internal/
