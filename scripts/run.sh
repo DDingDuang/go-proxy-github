@@ -4,6 +4,7 @@
 #   - 自动检测当前平台(OS/ARCH), 查找并运行匹配的二进制
 #   - 二进制按平台命名: bin/github-gateway-<os>-<arch>[.exe]
 #   - 找不到匹配二进制时按目标平台现场构建(需 Go 工具链)
+#   - 停止时跨平台强杀: TERM → KILL → 端口兜底 → taskkill 兜底
 #   - 日志写到项目 logs/, PID 记录在项目内, 不安装到系统
 #   用法: ./scripts/run.sh {start|stop|restart|status}
 #   环境变量:
@@ -45,7 +46,72 @@ esac
 PLATFORM="${OS}-${ARCH}"
 [ "$OS" = "windows" ] && EXE=".exe" || EXE=""
 
+# ── 监听端口(从 config.yaml 提取, 用于端口兜底杀进程) ──
+listen_port() {
+  sed -n 's/^[[:space:]]*listen:[[:space:]]*"\{0,1\}[^":]*:\([0-9][0-9]*\)"\{0,1\}.*/\1/p' \
+    "$CONFIG" 2>/dev/null | head -1
+}
+PORT="$(listen_port)"
+[ -z "$PORT" ] && PORT=38018
+
 mkdir -p "$LOGDIR" "$BIN_DIR"
+
+# ── 进程工具(跨平台) ──
+# kill_pid <pid>: 先 TERM, 等待退出, 未退再 KILL
+kill_pid() {
+  pid="$1"
+  kill "$pid" 2>/dev/null || true
+  i=0
+  while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 15 ]; do
+    sleep 0.2
+    i=$((i + 1))
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -9 "$pid" 2>/dev/null || true
+    sleep 0.3
+  fi
+}
+
+# pids_on_port: 列出监听 $PORT 的进程 PID(跨平台 netstat)
+pids_on_port() {
+  netstat -ano 2>/dev/null | grep ":$PORT" | grep -i listening | awk '{print $NF}' | sort -u
+}
+
+# stop_processes: 尽力终止网关进程, 返回 0 表示确实终止了至少一个
+stop_processes() {
+  stopped=0
+  # 1) PID 文件记录的进程
+  if [ -f "$PIDFILE" ]; then
+    pid=$(cat "$PIDFILE" 2>/dev/null || true)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      kill_pid "$pid"
+      stopped=1
+    fi
+    rm -f "$PIDFILE"
+  fi
+  # 2) 端口兜底: MSYS 下 kill 常失效, 直接按监听端口的真实 PID 处理
+  for pid in $(pids_on_port); do
+    if [ -n "$pid" ] && [ "$pid" != "0" ]; then
+      case "$OS" in
+        windows) taskkill //F //PID "$pid" >/dev/null 2>&1 || true ;;
+        *) kill_pid "$pid" ;;
+      esac
+      stopped=1
+    fi
+  done
+  # 3) Windows 兜底: 按进程名(防止 PID 文件与端口都失效的场景)
+  if [ "$OS" = "windows" ] && command -v taskkill >/dev/null 2>&1; then
+    taskkill //F //IM "${APP}.exe" >/dev/null 2>&1 && stopped=1
+  fi
+  return 0
+}
+
+# process_alive: PID 文件中的进程是否还活着
+process_alive() {
+  [ -f "$PIDFILE" ] || return 1
+  pid=$(cat "$PIDFILE" 2>/dev/null || true)
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
 
 # ── 二进制查找与验证 ──
 # binary_ok <path>: 通过 -version 探测, 验证二进制与当前平台匹配且可执行
@@ -54,7 +120,6 @@ binary_ok() {
   "$1" -version >/dev/null 2>&1
 }
 
-# find_binary: 按优先级查找匹配当前平台的二进制, 成功时设置全局 BIN
 find_binary() {
   if binary_ok "$BIN_DIR/$APP-$PLATFORM$EXE"; then
     BIN="$BIN_DIR/$APP-$PLATFORM$EXE"; return 0
@@ -68,7 +133,6 @@ find_binary() {
   return 1
 }
 
-# build: 按目标平台(当前检测到的 OS/ARCH)现场构建
 build() {
   echo "[run] 构建 ${APP}-${PLATFORM} ..."
   if ! command -v go >/dev/null 2>&1; then
@@ -84,7 +148,6 @@ build() {
   BIN="$BIN_DIR/$APP-$PLATFORM$EXE"
 }
 
-# resolve_binary: 定位或构建匹配当前平台的二进制(设置全局 BIN)
 resolve_binary() {
   if [ -n "${REBUILD:-}" ]; then
     build
@@ -101,31 +164,41 @@ start() {
     echo "[run] 未找到 config.yaml, 请先执行: cp config.example.yaml config.yaml 并填写上游代理"
     exit 1
   }
+  # 若旧进程未死(端口仍占用), 先清理, 避免端口冲突
+  if [ -n "$(pids_on_port)" ]; then
+    echo "[run] 检测到端口 ${PORT} 仍有旧进程占用, 正在清理..."
+    stop_processes
+    sleep 1
+  fi
   resolve_binary
 
-  if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-    echo "[run] already running (pid $(cat "$PIDFILE"))"
-    return 1
-  fi
   nohup "$BIN" -config "$CONFIG" >>"$LOGFILE" 2>&1 &
   echo $! >"$PIDFILE"
-  echo "[run] started pid=$(cat "$PIDFILE") binary=$BIN log=$LOGFILE"
+  sleep 1
+  if process_alive; then
+    echo "[run] started pid=$(cat "$PIDFILE") binary=$BIN log=$LOGFILE"
+  else
+    echo "[run] 启动失败, 请查看日志: $LOGFILE"
+    exit 1
+  fi
 }
 
 stop() {
-  if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-    kill "$(cat "$PIDFILE")"
-    rm -f "$PIDFILE"
-    echo "[run] stopped"
-  else
-    rm -f "$PIDFILE"
-    echo "[run] not running"
+  stop_processes
+  # 确认端口确实释放
+  sleep 1
+  if [ -n "$(pids_on_port)" ]; then
+    echo "[run] 警告: 仍有进程占用端口 ${PORT}, 请手动检查: netstat -ano | grep :${PORT}"
+    exit 1
   fi
+  echo "[run] stopped"
 }
 
 status() {
-  if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+  if process_alive; then
     echo "[run] running (pid $(cat "$PIDFILE"))"
+  elif [ -n "$(pids_on_port)" ]; then
+    echo "[run] 进程存活但 PID 文件缺失(可能由 stop 失效导致), 请执行 ./run.sh stop 清理"
   else
     echo "[run] stopped"
   fi
