@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -34,8 +35,16 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	var cfgPath string
+	var showVersion bool
 	flag.StringVar(&cfgPath, "config", "config.yaml", "配置文件路径")
+	flag.BoolVar(&showVersion, "version", false, "打印版本与平台信息后退出")
 	flag.Parse()
+
+	// -version: 供 run.sh 探测二进制与当前平台是否匹配
+	if showVersion {
+		fmt.Printf("github-gateway %s (%s/%s)\n", gateway.Version, runtime.GOOS, runtime.GOARCH)
+		return
+	}
 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
