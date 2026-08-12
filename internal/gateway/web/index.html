@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub 加速网关</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230064FA'/%3E%3Ctext x='16' y='23' font-size='18' font-weight='bold' text-anchor='middle' fill='white'%3EG%3C/text%3E%3C/svg%3E">
+<style>
+  /* ── Semi Design 亮色主题(Light) ──
+     依据 @douyinfe/semi-theme-default 官方色板:
+     blue-5 #0064FA / light-blue-5 #0095EE / green-5 #3BB346
+     red-5 #F93920 / orange-5 #FC8800 / grey 分层 text-0~3、bg-0~3、border-0~2、fill-0~2 */
+  :root {
+    --bg: #FFFFFF;            /* semi-bg-0  页面背景 */
+    --bg-1: #F5F6FA;          /* semi-bg-1  次级背景(卡片/导航) */
+    --bg-2: #F1F2F5;          /* semi-bg-2  悬停/更深一级 */
+    --bg-3: #EBEDF0;          /* semi-bg-3  分隔/禁用背景 */
+    --text-0: #1C1F23;        /* semi-text-0 主文字 */
+    --text-1: #35383D;        /* semi-text-1 次级文字 */
+    --text-2: #5F6672;        /* semi-text-2 说明文字 */
+    --text-3: #A8AEB7;        /* semi-text-3 占位/弱化 */
+    --border-0: #C5CCD6;      /* semi-border-0 输入边框 */
+    --border-1: #E0E3E8;      /* semi-border-1 常规边框 */
+    --border-2: #EBEDF0;      /* semi-border-2 细分隔线 */
+    --fill-0: #E5E8EE;        /* semi-fill-0  输入框/按钮底 */
+    --fill-1: #EBEDF1;        /* semi-fill-1  次级填充 */
+    --fill-2: #EEF1F5;        /* semi-fill-2  更浅填充 */
+    --primary: #0064FA;       /* semi-blue-5   主色 */
+    --primary-hover: #0062D6; /* semi-blue-6   主色悬停 */
+    --primary-active: #004FB3;/* semi-blue-7   主色按下 */
+    --primary-light: rgba(0,100,250,.08);
+    --secondary: #0095EE;     /* semi-light-blue-5 次色 */
+    --success: #3BB346;       /* semi-green-5  成功 */
+    --danger: #F93920;        /* semi-red-5    危险 */
+    --warning: #FC8800;       /* semi-orange-5 警告 */
+    --grad: linear-gradient(135deg,#0064FA 0%,#0095EE 100%);
+    --mono: ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,monospace;
+    --font: 'Inter',-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB',
+            'Microsoft YaHei','Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; }
+  body {
+    background:var(--bg); color:var(--text-0);
+    font-family:var(--font);
+    -webkit-font-smoothing:antialiased;
+  }
+  .glow { position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background:
+      radial-gradient(700px 320px at 12% -8%, rgba(0,100,250,.06), transparent 60%),
+      radial-gradient(600px 300px at 88% -8%, rgba(0,149,238,.06), transparent 60%); }
+
+  /* ── 顶部导航 ── */
+  nav {
+    position:sticky; top:0; z-index:10;
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    background:rgba(255,255,255,.8);
+    border-bottom:1px solid var(--border-2);
+  }
+  .nav-inner {
+    max-width:980px; margin:0 auto; padding:0 24px; height:58px;
+    display:flex; align-items:center; gap:28px;
+  }
+  .nav-logo { display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
+  .nav-logo .mark {
+    width:28px; height:28px; border-radius:8px; background:var(--grad);
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px; font-weight:700; color:#fff;
+    box-shadow:0 2px 10px rgba(0,100,250,.30);
+  }
+  .nav-logo .name { font-size:15px; font-weight:600; letter-spacing:.2px; color:var(--text-0); }
+  .nav-logo .ver { font-size:11px; color:var(--text-3); margin-top:1px; }
+  .tabs { display:flex; gap:2px; margin-left:8px; flex:1; }
+  .tab {
+    appearance:none; background:none; border:none; cursor:pointer;
+    color:var(--text-2); font-size:14px; font-family:var(--font);
+    padding:8px 16px; border-radius:6px;
+    position:relative; transition:color .15s, background .15s;
+  }
+  .tab:hover { color:var(--primary); background:var(--primary-light); }
+  .tab.active { color:var(--primary); font-weight:600; }
+  .tab.active::after {
+    content:""; position:absolute; left:16px; right:16px; bottom:-1px; height:2px;
+    background:var(--grad); border-radius:2px;
+  }
+  .nav-right { display:flex; align-items:center; gap:10px; }
+  .pill {
+    display:flex; align-items:center; gap:7px;
+    font-size:12px; color:var(--text-2);
+    border:1px solid var(--border-1); border-radius:9999px; padding:5px 12px;
+    background:var(--bg-1);
+  }
+  .dot { width:7px; height:7px; border-radius:50%; flex:none; }
+  .dot.ok { background:var(--success); box-shadow:0 0 6px rgba(59,179,70,.5); }
+  .dot.err { background:var(--danger); box-shadow:0 0 6px rgba(249,57,32,.5); }
+  .dot.warn { background:var(--warning); }
+  .dot.busy { background:var(--text-3); animation:blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+
+  /* ── 页面 ── */
+  main { max-width:980px; margin:0 auto; padding:44px 24px 80px; }
+  .page { display:none; }
+  .page.active { display:block; animation:fade .25s ease; }
+  @keyframes fade { from { opacity:0; transform:translateY(6px); } }
+  .page-title { font-size:24px; font-weight:600; letter-spacing:.2px; color:var(--text-0); }
+  .page-sub { font-size:13px; color:var(--text-2); margin-top:6px; }
+
+  /* ── 项目检查 ── */
+  .check-zone { margin-top:34px; }
+  .check-form { display:flex; gap:10px; max-width:640px; }
+  .check-form input {
+    flex:1; background:var(--bg); border:1px solid var(--border-0); color:var(--text-0);
+    padding:13px 16px; border-radius:6px; outline:none;
+    transition:border-color .15s, box-shadow .15s;
+    font-family:var(--mono); font-size:13.5px;
+  }
+  .check-form input:hover { border-color:var(--border-0); }
+  .check-form input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(0,100,250,.12); }
+  .check-form input::placeholder { color:var(--text-3); font-family:inherit; }
+  .btn {
+    appearance:none; border:none; cursor:pointer; border-radius:6px;
+    padding:0 26px; font-size:14px; font-weight:600; color:#fff;
+    background:var(--primary); transition:background .15s, transform .1s;
+    font-family:var(--font);
+  }
+  .btn:hover { background:var(--primary-hover); }
+  .btn:active { background:var(--primary-active); transform:scale(.97); }
+  .btn:disabled { background:var(--primary); opacity:.45; cursor:wait; }
+
+  .check-result { margin-top:36px; max-width:720px; }
+  .result-head { display:flex; align-items:center; gap:10px; font-size:15px; margin-bottom:18px; font-weight:600; }
+  .result-head .ic { font-size:15px; }
+  .result-head.ok { color:var(--success); }
+  .result-head.no { color:var(--danger); }
+  .result-head.fail { color:var(--warning); }
+
+  .repo-line { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  .repo-line .full { font-size:19px; font-weight:700; color:var(--text-0); }
+  .repo-line .full a { color:var(--primary); text-decoration:none; }
+  .repo-line .full a:hover { text-decoration:underline; }
+  .meta { display:flex; align-items:center; gap:14px; font-size:12.5px; color:var(--text-2); margin-top:8px; }
+  .meta b { color:var(--text-0); font-weight:600; }
+  .desc { font-size:13.5px; color:var(--text-1); line-height:1.6; margin-top:14px; max-width:620px; }
+  .tags { display:flex; gap:6px; margin-top:14px; flex-wrap:wrap; }
+  .tag { font-size:11.5px; color:var(--text-2); border:1px solid var(--border-1); border-radius:9999px; padding:3px 10px; }
+  .tag.private { color:var(--warning); border-color:rgba(252,136,0,.4); }
+
+  .cmd-section { margin-top:34px; }
+  .cmd-section .label { font-size:13px; color:var(--text-2); margin-bottom:10px; font-weight:600; }
+  .cmd-block { border:1px solid var(--border-1); border-radius:8px; overflow:hidden; margin-bottom:12px; background:var(--bg-1); }
+  .cmd-head { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-bottom:1px solid var(--border-2); }
+  .cmd-head .name { font-size:12px; color:var(--text-2); }
+  .copy {
+    appearance:none; background:var(--bg); border:1px solid var(--border-1); color:var(--text-2);
+    font-size:11.5px; padding:3px 12px; border-radius:6px; cursor:pointer; transition:all .15s;
+    font-family:var(--font);
+  }
+  .copy:hover { color:var(--primary); border-color:var(--primary); }
+  .copy.done { color:var(--success); border-color:var(--success); }
+  .cmd-body { padding:13px 14px; font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#004FB3; word-break:break-all; }
+  .cmd-note { font-size:12px; color:var(--text-2); line-height:1.7; margin-top:10px; }
+  .no-more { font-size:13.5px; color:var(--text-2); line-height:1.7; }
+
+  /* ── 访问日志 ── */
+  .log-list { margin-top:30px; }
+  .log-row {
+    display:grid; grid-template-columns:172px 110px 1fr 74px 40px;
+    gap:16px; align-items:center; padding:13px 6px;
+    border-bottom:1px solid var(--border-2);
+    font-size:13px; transition:background .12s;
+  }
+  .log-row:hover { background:rgba(0,100,250,.04); }
+  .log-row .t { color:var(--text-3); font-family:var(--mono); font-size:12px; }
+  .log-row .ip { font-family:var(--mono); font-size:12.5px; color:var(--text-1); }
+  .log-row .proj { color:#004FB3; font-family:var(--mono); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .log-row .rt { color:var(--text-3); font-size:12px; text-align:right; font-family:var(--mono); }
+  .log-row .st { font-weight:600; text-align:center; font-family:var(--mono); font-size:12.5px; }
+  .st-ok { color:var(--success); } .st-no { color:var(--danger); } .st-warn { color:var(--warning); }
+  .log-head-row {
+    display:grid; grid-template-columns:172px 110px 1fr 74px 40px; gap:16px;
+    padding:0 6px 10px; font-size:11.5px; color:var(--text-3); letter-spacing:.5px;
+  }
+  .empty { padding:44px 0; text-align:center; color:var(--text-3); font-size:13px; }
+  .pager { display:flex; align-items:center; justify-content:center; gap:12px; margin-top:22px; }
+  .pager .info { font-size:12.5px; color:var(--text-2); }
+  .pbtn {
+    appearance:none; background:var(--bg); border:1px solid var(--border-1); color:var(--text-2);
+    font-size:12.5px; padding:7px 16px; border-radius:6px; cursor:pointer; transition:all .15s;
+    font-family:var(--font);
+  }
+  .pbtn:hover:not(:disabled) { color:var(--primary); border-color:var(--primary); }
+  .pbtn:disabled { opacity:.35; cursor:default; }
+
+  /* ── 系统信息 ── */
+  .sys-zone { margin-top:34px; max-width:720px; }
+  .proxy-banner {
+    display:flex; align-items:center; gap:14px;
+    border:1px solid var(--border-1); border-radius:12px; padding:18px 22px;
+    background:var(--bg-1); margin-bottom:30px;
+  }
+  .proxy-banner .dot { width:10px; height:10px; }
+  .proxy-banner .bt { font-size:15px; font-weight:600; color:var(--text-0); }
+  .proxy-banner .bs { font-size:12px; color:var(--text-2); margin-top:3px; }
+  .btn-recheck {
+    appearance:none; background:var(--bg); border:1px solid var(--border-1); color:var(--text-2);
+    font-size:12px; padding:3px 12px; border-radius:6px; cursor:pointer;
+    font-family:var(--font); transition:all .15s; white-space:nowrap; margin-left:10px;
+  }
+  .btn-recheck:hover { color:var(--primary); border-color:var(--primary); }
+  .btn-recheck:disabled { opacity:.5; cursor:wait; }
+  .proxy-banner .lat { margin-left:auto; text-align:right; }
+  .proxy-banner .lat .n { font-size:20px; font-weight:700; font-family:var(--mono); color:var(--text-0); }
+  .proxy-banner .lat .l { font-size:11px; color:var(--text-3); margin-top:2px; }
+  .kv { border-top:1px solid var(--border-2); }
+  .kv-row { display:flex; justify-content:space-between; gap:24px; padding:14px 4px; border-bottom:1px solid var(--border-2); font-size:13.5px; }
+  .kv-row .k { color:var(--text-2); flex:none; }
+  .kv-row .v { color:var(--text-0); text-align:right; word-break:break-all; }
+  .kv-row .v code { font-family:var(--mono); font-size:12.5px; color:#004FB3; }
+  .stat-line { display:flex; gap:0; margin-top:34px; border:1px solid var(--border-1); border-radius:12px; overflow:hidden; background:var(--bg-1); }
+  .stat-cell { flex:1; padding:20px 8px; text-align:center; }
+  .stat-cell + .stat-cell { border-left:1px solid var(--border-2); }
+  .stat-cell .n { font-size:22px; font-weight:700; font-family:var(--mono); color:var(--text-0); }
+  .stat-cell .l { font-size:11.5px; color:var(--text-2); margin-top:5px; }
+
+  footer { max-width:980px; margin:0 auto; padding:0 24px 40px; color:var(--text-3); font-size:12px; }
+  @media (max-width:720px) {
+    .nav-inner { gap:14px; padding:0 14px; }
+    .tabs { margin-left:0; }
+    .log-row, .log-head-row { grid-template-columns:1fr 90px 34px; }
+    .log-row .proj { grid-column:1/-1; order:-1; }
+  }
+  @media (prefers-reduced-motion:reduce) { * { animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo" onclick="go('check')">
+      <div class="mark">G</div>
+      <div>
+        <div class="name">GitHub 加速网关</div>
+        <div class="ver">v<span id="version">-</span> · 局域网</div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="check" onclick="go('check')">项目检查</button>
+      <button class="tab" data-tab="logs" onclick="go('logs')">访问日志</button>
+      <button class="tab" data-tab="sys" onclick="go('sys')">系统信息</button>
+    </div>
+    <div class="nav-right">
+      <span class="pill"><span class="dot" id="proxyDot"></span><span id="proxyText">检测中</span></span>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <!-- ── 项目检查 ── -->
+  <section class="page active" id="page-check">
+    <div class="page-title">项目检查</div>
+    <div class="page-sub">输入 GitHub 项目地址, 校验仓库是否存在并生成可用的 clone 命令</div>
+
+    <div class="check-zone">
+      <div class="check-form">
+        <input id="repoUrl" type="text" placeholder="https://github.com/owner/repo" spellcheck="false" autocomplete="off">
+        <button class="btn" id="checkBtn" onclick="checkRepo()">检查</button>
+      </div>
+
+      <div class="check-result" id="result" hidden>
+        <div class="result-head" id="resultHead"></div>
+        <div id="resultBody"></div>
+        <div class="cmd-section" id="cmdSection" hidden>
+          <div class="label">CLONE 命令</div>
+          <div id="cmdList"></div>
+          <div class="cmd-note">💡 方式一为 HTTP 代理模式(支持所有 GitHub 域名), 方式二为路径模式(不设代理)。网关地址已自动填写, 局域网内其他机器可直接使用。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 访问日志 ── -->
+  <section class="page" id="page-logs">
+    <div class="page-title">访问日志</div>
+    <div class="page-sub">仅展示 Git 项目检查记录 · 自动刷新</div>
+    <div class="log-list">
+      <div class="log-head-row">
+        <span>时间</span><span>IP</span><span>项目地址</span><span style="text-align:right">耗时</span><span style="text-align:center">结果</span>
+      </div>
+      <div id="logRows"><div class="empty">加载中...</div></div>
+      <div class="pager">
+        <button class="pbtn" id="prevBtn" onclick="pageLogs(-1)" disabled>‹ 上一页</button>
+        <span class="info" id="pageInfo">第 1 / 1 页 · 共 0 条</span>
+        <button class="pbtn" id="nextBtn" onclick="pageLogs(1)" disabled>下一页 ›</button>
+        <button class="pbtn" onclick="refreshLogs(true)" style="margin-left:6px">刷新</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 系统信息 ── -->
+  <section class="page" id="page-sys">
+    <div class="page-title">系统信息</div>
+    <div class="page-sub">服务状态与运行概况</div>
+
+    <div class="sys-zone">
+      <div class="proxy-banner">
+        <span class="dot" id="sysDot"></span>
+        <div>
+          <div class="bt"><span id="sysTitle">上游代理 · 检测中</span><button class="btn-recheck" id="recheckBtn" onclick="recheckProxy()">再次检测</button></div>
+          <div class="bs" id="sysSub">正在检测代理连通性...</div>
+        </div>
+        <div class="lat">
+          <div class="n" id="sysLat">-</div>
+          <div class="l">延迟</div>
+        </div>
+      </div>
+
+      <div class="kv">
+        <div class="kv-row"><span class="k">运行时长</span><span class="v" id="uptime">-</span></div>
+        <div class="kv-row"><span class="k">监听地址</span><span class="v"><code id="listen">-</code></span></div>
+        <div class="kv-row"><span class="k">局域网 IP</span><span class="v"><code id="localIps">-</code></span></div>
+        <div class="kv-row"><span class="k">上游代理</span><span class="v"><code id="upstream">-</code></span></div>
+        <div class="kv-row"><span class="k">代理上次检测</span><span class="v" id="proxyChecked">-</span></div>
+        <div class="kv-row"><span class="k">路径模式</span><span class="v" id="pathProxy">-</span></div>
+        <div class="kv-row"><span class="k">白名单域名</span><span class="v" id="domains">-</span></div>
+      </div>
+
+      <div class="stat-line">
+        <div class="stat-cell"><div class="n" id="stReq">0</div><div class="l">请求</div></div>
+        <div class="stat-cell"><div class="n" id="stConn">0</div><div class="l">隧道</div></div>
+        <div class="stat-cell"><div class="n" id="stActive">0</div><div class="l">活跃隧道</div></div>
+        <div class="stat-cell"><div class="n" id="stTraffic">0</div><div class="l">流量</div></div>
+        <div class="stat-cell"><div class="n" id="stErrors">0</div><div class="l">错误</div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>局域网 GitHub 加速网关 · 配置以 config.yaml 为准</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, ch =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const fmtBytes = n => {
+  if (n < 1024) return n + ' B';
+  const u = ['KB','MB','GB','TB']; let i = -1;
+  do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+  return n.toFixed(1) + ' ' + u[i];
+};
+const fmtUptime = sec => {
+  const d = Math.floor(sec/86400), h = Math.floor(sec%86400/3600), m = Math.floor(sec%3600/60), s = Math.floor(sec%60);
+  return (d ? d+'天 ' : '') + h+'时 ' + m+'分 ' + s+'秒';
+};
+const fmtTime = ts => new Date(ts).toLocaleString('zh-CN',
+  { hour12:false, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+const fmtLat = ms => ms == null ? '-' : (ms >= 1000 ? (ms/1000).toFixed(2)+'s' : ms+'ms');
+
+/* ── tab 切换 ── */
+function go(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
+}
+
+/* ── 系统信息 + 代理状态(后台常驻刷新) ── */
+async function refreshSys() {
+  try {
+    const d = await (await fetch('/api/stats')).json();
+    const s = d.stats || {}, ps = d.proxy_status || {};
+    $('version').textContent = d.version;
+    $('uptime').textContent = fmtUptime(s.uptime || 0);
+    $('listen').textContent = d.listen || '-';
+    $('localIps').textContent = (d.local_ips || []).join(', ') || '-';
+    $('upstream').textContent = d.upstream_proxy || '-';
+    $('pathProxy').textContent = d.path_proxy ? '已开启' : '已关闭';
+    $('domains').textContent = (d.allowed_domains || []).length + ' 个';
+    $('stReq').textContent = s.requests || 0;
+    $('stConn').textContent = s.connects || 0;
+    $('stActive').textContent = s.active_connects || 0;
+    $('stTraffic').textContent = fmtBytes((s.bytes_up||0) + (s.bytes_down||0));
+    $('stErrors').textContent = s.errors || 0;
+    $('proxyChecked').textContent = ps.checked_at ? fmtTime(ps.checked_at) : '-';
+
+    const dot = $('proxyDot'), sysDot = $('sysDot');
+    if (ps.ok === true) {
+      dot.className = 'dot ok'; sysDot.className = 'dot ok';
+      $('proxyText').textContent = '代理可用';
+      $('sysTitle').textContent = '上游代理 · 可用';
+      $('sysSub').textContent = ps.checked_at ? '最近检测 ' + fmtTime(ps.checked_at) : '';
+      $('sysLat').textContent = (ps.latency_ms ?? '-') + (ps.latency_ms != null ? '' : '');
+    } else if (ps.ok === false) {
+      dot.className = 'dot err'; sysDot.className = 'dot err';
+      $('proxyText').textContent = '代理不可用';
+      $('sysTitle').textContent = '上游代理 · 不可用';
+      $('sysSub').textContent = ps.error || '未知错误';
+      $('sysLat').textContent = ps.latency_ms != null ? ps.latency_ms + '' : '-';
+    } else {
+      dot.className = 'dot busy'; sysDot.className = 'dot busy';
+      $('proxyText').textContent = '检测中';
+      $('sysTitle').textContent = '上游代理 · 检测中';
+      $('sysSub').textContent = '正在检测代理连通性...';
+      $('sysLat').textContent = '-';
+    }
+  } catch (e) {
+    $('proxyDot').className = 'dot err';
+    $('proxyText').textContent = '无法连接';
+  }
+}
+
+/* ── 项目检查 ── */
+async function checkRepo() {
+  const url = $('repoUrl').value.trim();
+  if (!url) { $('repoUrl').focus(); return; }
+  const btn = $('checkBtn'), result = $('result');
+  btn.disabled = true; btn.textContent = '检查中...';
+  result.hidden = true; $('cmdSection').hidden = true;
+
+  try {
+    const resp = await fetch('/api/repo/check', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    const d = await resp.json();
+    const head = $('resultHead');
+    result.hidden = false;
+
+    if (d.exists === true) {
+      head.className = 'result-head ok';
+      head.innerHTML = '<span class="ic">✓</span> 项目存在';
+      const r = d.full_name.split('/');
+      $('resultBody').innerHTML =
+        `<div class="repo-line"><span class="full"><a href="https://github.com/${esc(r[0])}/${esc(r[1])}" target="_blank" rel="noopener">${esc(d.full_name)}</a></span></div>` +
+        (d.description ? `<div class="desc">${esc(d.description)}</div>` : '') +
+        `<div class="meta">` +
+        `<span>★ <b>${d.stars ?? 0}</b></span><span>⑂ <b>${d.forks ?? 0}</b></span>` +
+        (d.language ? `<span>${esc(d.language)}</span>` : '') +
+        (d.default_branch ? `<span>${esc(d.default_branch)}</span>` : '') +
+        `</div>` +
+        `<div class="tags">${d.private ? '<span class="tag private">私有仓库</span>' : ''}</div>`;
+      $('cmdList').innerHTML = (d.clone_commands || []).map((cmd, i) =>
+        `<div class="cmd-block">
+           <div class="cmd-head"><span class="name">${i===0 ? '方式一 · HTTP 代理模式' : '方式二 · 路径模式'}</span>
+           <button class="copy" onclick="copyCmd(this)">复制</button></div>
+           <div class="cmd-body">${esc(cmd)}</div>
+         </div>`).join('');
+      $('cmdSection').hidden = false;
+    } else if (d.exists === false) {
+      head.className = 'result-head no';
+      head.innerHTML = '<span class="ic">✕</span> 项目不存在';
+      $('resultBody').innerHTML = `<div class="no-more">未找到 <b>${esc(d.full_name || url)}</b>, 请检查地址是否正确。</div>`;
+    } else {
+      head.className = 'result-head fail';
+      head.innerHTML = '<span class="ic">⚠</span> 检查失败';
+      $('resultBody').innerHTML = `<div class="no-more">${esc(d.error || '未知错误')}</div>`;
+    }
+  } catch (e) {
+    result.hidden = false;
+    $('resultHead').className = 'result-head fail';
+    $('resultHead').innerHTML = '<span class="ic">⚠</span> 请求失败';
+    $('resultBody').innerHTML = `<div class="no-more">${esc(String(e))}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '检查';
+  }
+}
+
+async function copyCmd(btn) {
+  const cmd = btn.closest('.cmd-block').querySelector('.cmd-body').textContent;
+  try {
+    await navigator.clipboard.writeText(cmd);
+    btn.textContent = '已复制 ✓'; btn.classList.add('done');
+    setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('done'); }, 1500);
+  } catch (e) { btn.textContent = '复制失败'; }
+}
+
+/* ── 访问日志(仅 git 检查, SQLite 持久化 + 分页) ── */
+let logPage = 1, logPages = 1, logTotal = 0;
+const LOG_PAGE_SIZE = 20;
+
+async function refreshLogs(manual) {
+  // 自动刷新仅作用于首页, 翻页后需手动刷新避免列表跳动
+  if (!manual && logPage !== 1) return;
+  try {
+    const d = await (await fetch(`/api/logs?kind=repo_check&page=${logPage}&page_size=${LOG_PAGE_SIZE}`)).json();
+    logTotal = d.total || 0; logPages = d.pages || 1;
+    const logs = d.logs || [];
+    $('logRows').innerHTML = logs.length ? logs.map(l => {
+      const st = l.status === 200 ? 'st-ok' : l.status < 400 ? 'st-warn' : 'st-no';
+      return `<div class="log-row">
+        <span class="t">${fmtTime(l.time)}</span>
+        <span class="ip">${esc(l.ip)}</span>
+        <span class="proj" title="${esc(l.project)}">${esc(l.project)}</span>
+        <span class="rt">${fmtLat(l.latency_ms)}</span>
+        <span class="st ${st}">${l.status}</span>
+      </div>`;
+    }).join('') : '<div class="empty">暂无 Git 检查记录</div>';
+    $('pageInfo').textContent = `第 ${logPage} / ${logPages} 页 · 共 ${logTotal} 条`;
+    $('prevBtn').disabled = logPage <= 1;
+    $('nextBtn').disabled = logPage >= logPages;
+  } catch (e) { /* ignore */ }
+}
+
+function pageLogs(delta) {
+  const np = logPage + delta;
+  if (np < 1 || np > logPages) return;
+  logPage = np;
+  refreshLogs(true);
+}
+
+/* ── 手动重新检测代理 ── */
+async function recheckProxy() {
+  const btn = $('recheckBtn');
+  btn.disabled = true; btn.textContent = '检测中...';
+  try {
+    await fetch('/api/proxy/check', { method: 'POST' });
+  } catch (e) { /* 接口失败也刷新, 展示当前状态 */ }
+  await refreshSys(); // 立即刷新展示最新检测结果
+  btn.disabled = false; btn.textContent = '再次检测';
+}
+
+$('repoUrl').addEventListener('keydown', e => { if (e.key === 'Enter') checkRepo(); });
+
+refreshSys(); refreshLogs();
+setInterval(refreshSys, 3000);
+setInterval(refreshLogs, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# =====================================================================
+# systemd 服务示例(可选, 文件存放在项目内, 不主动安装到系统)
+# 需要开机自启时, 按实际部署路径修改后拷贝到服务器:
+#   sudo cp deploy/github-gateway.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now github-gateway
+# =====================================================================
+[Unit]
+Description=GitHub Gateway (LAN accelerator)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 按实际部署目录修改(建议 /opt/github-gateway)
+WorkingDirectory=/opt/github-gateway
+ExecStart=/opt/github-gateway/github-gateway -config /opt/github-gateway/config.yaml
+Restart=always
+RestartSec=3
+
+# 可选: 使用环境变量覆盖敏感配置, 避免明文写在 config.yaml
+# Environment=GATEWAY_UPSTREAM_PROXY=http://user:pass@proxy:2260
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+# 构建产物
+bin/
+dist/
+*.exe
+
+# 日志
+logs/
+*.log
+
+# ── 敏感信息与本地配置(勿提交) ──
+# 真实配置文件(含上游代理账号密码), 请使用 config.example.yaml 复制为 config.yaml 后填写
+config.yaml
+config.local.yaml
+# 本地 MCP 配置(开发机私有)
+.mcp.json
+
+# 项目检查记录数据库
+data/
+*.db

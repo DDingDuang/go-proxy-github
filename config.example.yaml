@@ -1,0 +1,58 @@
+# =====================================================================
+# GitHub 加速网关 - 配置样例模板
+# 使用方式: cp config.example.yaml config.yaml 后按需修改
+# 注意: config.yaml 含上游代理账号密码, 已被 .gitignore 忽略, 请勿提交
+# =====================================================================
+
+server:
+  # 网关监听地址(局域网内所有客户端都通过它访问)
+  listen: "0.0.0.0:38018"
+  # 读取请求头超时
+  read_header_timeout: 10s
+  # Git 项目检查记录存储路径(SQLite, 项目级, 自动创建), 留空则仅存内存
+  db_path: "data/checks.db"
+
+proxy:
+  # 上游 HTTP 代理地址, 必须带用户名密码, 格式: http://用户名:密码@主机:端口
+  # 也支持 https 协议的代理: https://user:pass@proxy.example.com:8443
+  upstream_proxy: "http://USERNAME:PASSWORD@proxy.example.com:8080"
+
+  # 允许加速的 GitHub 域名白名单(后缀匹配:
+  # 填 github.com 会自动匹配 api.github.com、raw.githubusercontent.com 等)
+  allowed_domains:
+    - github.com
+    - githubusercontent.com
+    - github.io
+    - githubassets.com
+    - githubapp.com
+    - github.dev
+    - githubcopilot.com
+    - github.blog
+    - githubstatus.com
+    - ghcr.io
+    - ssh.github.com
+
+  # 是否启用路径模式代理: http://网关:8080/https://github.com/xxx
+  # (配合 git 的 url."http://网关:8080/https://github.com/".insteadOf 使用)
+  path_proxy: true
+
+  # 是否允许 CONNECT 隧道任意域名(默认 false, 仅白名单域名, 防止开放代理滥用)
+  connect_allow_any: false
+
+  # 是否跳过上游 TLS 证书校验(仅调试用, 生产环境保持 false)
+  insecure_skip_verify: false
+
+  # 连接上游代理超时
+  dial_timeout: 10s
+  # 上游 TLS 握手超时
+  tls_timeout: 30s
+  # 等待上游响应头超时
+  response_timeout: 60s
+  # 空闲连接保留时间
+  idle_conn_timeout: 90s
+
+log:
+  # 日志级别: debug | info | warn | error
+  level: info
+  # 输出目标: stdout 或日志文件路径(如 logs/gateway.log)
+  output: stdout
