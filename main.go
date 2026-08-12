@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"syscall"
 	"time"
@@ -18,6 +19,25 @@ import (
 	"go-proxy-github-cn/internal/gateway"
 	"go-proxy-github-cn/internal/logger"
 )
+
+// probeConfigPath 默认配置路径自动探测(仅当未显式指定 -config 时生效):
+// 依次尝试 当前目录 → 二进制所在目录的上级(项目根) → 二进制同目录
+func probeConfigPath(defaultPath string) string {
+	candidates := []string{defaultPath} // 当前工作目录
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(dir, "..", defaultPath), // bin/../config.yaml(项目根)
+			filepath.Join(dir, defaultPath),       // 与二进制同目录
+		)
+	}
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
+			return c
+		}
+	}
+	return defaultPath
+}
 
 // proxyHandler 统一入口: CONNECT 隧道请求直接处理, 其余交给 gin 引擎
 type proxyHandler struct {
@@ -39,6 +59,17 @@ func main() {
 	flag.StringVar(&cfgPath, "config", "config.yaml", "配置文件路径")
 	flag.BoolVar(&showVersion, "version", false, "打印版本与平台信息后退出")
 	flag.Parse()
+
+	// 检测 -config 是否被显式指定
+	explicitConfig := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "config" {
+			explicitConfig = true
+		}
+	})
+	if !explicitConfig {
+		cfgPath = probeConfigPath(cfgPath)
+	}
 
 	// -version: 供 run.sh 探测二进制与当前平台是否匹配
 	if showVersion {
