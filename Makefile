@@ -1,12 +1,7 @@
-.PHONY: build run test vet clean
-
-BIN := bin/github-gateway
+.PHONY: build test vet clean
 
 build:
-	go build -o $(BIN) .
-
-run: build
-	$(BIN) -config config.yaml
+	./scripts/build.sh
 
 test:
 	go test ./...
@@ -15,4 +10,4 @@ vet:
 	go vet ./...
 
 clean:
-	rm -rf bin logs
+	rm -rf bin dist logs

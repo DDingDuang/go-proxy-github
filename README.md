@@ -38,26 +38,31 @@ proxy:
 
 > `config.yaml` 已被 `.gitignore` 忽略(含敏感信息),请勿提交;仓库内只保留 `config.example.yaml` 模板。
 
-### 2. 运行
+### 2. 构建并运行
 
-**项目级启动(推荐, 零环境污染)** — 构建产物/日志/数据库/PID 全部落在项目目录内:
+**构建当前平台二进制**(产物输出到项目 `bin/`, 不安装到系统):
 
 ```bash
-./scripts/run.sh start      # 构建并后台启动(日志 logs/github-gateway.log)
-./scripts/run.sh status     # 查看状态
-./scripts/run.sh restart    # 重启
-./scripts/run.sh stop       # 停止
+./scripts/build.sh          # Linux/macOS, 输出 bin/github-gateway-<os>-<arch>
+scripts\build.bat           # Windows, 输出 bin\github-gateway-<os>-<arch>.exe
 ```
 
-Windows 本地调试: `scripts\run.bat`(前台运行)。
-
-**部署到其他服务器(项目级打包)**:
+**运行**:
 
 ```bash
-./scripts/deploy.sh         # 产出 dist/github-gateway-<version>.tar.gz
+./bin/github-gateway-linux-amd64 -config config.yaml   # 按平台选择对应二进制
+```
+
+Windows 本地调试: `scripts\build.bat` 后直接运行 `bin\github-gateway-windows-amd64.exe -config config.yaml`(前台)。
+
+**部署到其他服务器(项目级打包, 服务器无需 Go)**:
+
+```bash
+./scripts/deploy.sh         # 构建 linux/amd64 + linux/arm64, 产出 dist/github-gateway-<version>.tar.gz
 # 拷到服务器任意目录:
 tar xzf github-gateway-<version>.tar.gz
-./run.sh start
+cp config.example.yaml config.yaml   # 填写上游代理账号密码
+./github-gateway-linux-amd64 -config config.yaml   # 按服务器架构选择对应二进制
 ```
 
 需要开机自启时, 使用项目内自带的 systemd 示例(按需拷贝, 不主动安装):
@@ -142,9 +147,9 @@ git config url."http://192.168.1.10:38018/https://raw.githubusercontent.com/".in
 ├── main.go                     # 入口: CONNECT 与 gin 路由分发、优雅退出
 ├── config.example.yaml         # 配置样例模板(真实 config.yaml 被 .gitignore 忽略)
 ├── scripts/
-│   ├── run.sh                  # 项目级启停(构建/日志/PID 均在项目内)
-│   ├── deploy.sh               # 自包含部署包打包
-│   └── run.bat                 # Windows 本地调试
+│   ├── build.sh               # 构建当前平台二进制(Linux/macOS)
+│   ├── build.bat              # 构建当前平台二进制(Windows)
+│   └── deploy.sh              # 多平台部署包打包
 ├── deploy/
 │   └── github-gateway.service  # systemd 服务示例(按需拷贝)
 └── internal/
