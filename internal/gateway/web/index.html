@@ -463,13 +463,42 @@ async function checkRepo() {
   }
 }
 
+// 复制文本: 优先 Clipboard API(仅 HTTPS/localhost 安全上下文可用),
+// 失败时回退 textarea + execCommand('copy')(HTTP 局域网环境可用)
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) { /* 继续回退 */ }
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    ta.style.pointerEvents = 'none';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function copyCmd(btn) {
   const cmd = btn.closest('.cmd-block').querySelector('.cmd-body').textContent;
-  try {
-    await navigator.clipboard.writeText(cmd);
+  const ok = await copyText(cmd);
+  if (ok) {
     btn.textContent = '已复制 ✓'; btn.classList.add('done');
     setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('done'); }, 1500);
-  } catch (e) { btn.textContent = '复制失败'; }
+  } else {
+    btn.textContent = '复制失败, 请手动选择复制'; btn.classList.add('done');
+    setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('done'); }, 2000);
+  }
 }
 
 /* ── 访问日志(仅 git 检查, SQLite 持久化 + 分页) ── */
